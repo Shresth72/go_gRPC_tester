@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package myservice.init;
+
+service InitService { rpc SendInit(InitRequest) returns (InitResponse); }
+
+message InitRequest {
+  string src = 1;
+  string dest = 2;
+  InitRequestBody body = 3;
+}
+
+message InitRequestBody {
+  string type = 3;
+  string node_id = 4;
+  repeated string node_ids = 4;
+}
+
+message InitResponse { string src }
