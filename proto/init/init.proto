@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package myservice.init;
 
+option go_package = "github.com/Shresth72/go_gRPC_tester/proto/init";
+
 service InitService { rpc SendInit(InitRequest) returns (InitResponse); }
 
 message InitRequest {
@@ -11,9 +13,19 @@ message InitRequest {
 }
 
 message InitRequestBody {
-  string type = 3;
-  string node_id = 4;
-  repeated string node_ids = 4;
+  string type = 1;
+  string node_id = 2;
+  repeated string node_ids = 3;
 }
 
-message InitResponse { string src }
+message InitResponse {
+  string src = 1;
+  string dest = 2;
+  InitResponseBody body = 3;
+}
+
+message InitResponseBody {
+  int32 msg_id = 1;
+  optional string in_reply_to = 2;
+  string type = 3;
+}
