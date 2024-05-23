@@ -1,7 +1,5 @@
 # *.pb.go
 
-bin
-bin/
 /bin
 
 go.sum
