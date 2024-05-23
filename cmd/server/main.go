@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -22,8 +25,61 @@ type server struct {
 	mu          sync.Mutex
 }
 
+func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.InitResponse, error) {
+  s.mu.Lock()
+  defer s.mu.Unlock()
+
+  message, err := json.Marshal(in)
+  if err != nil {
+    return nil, fmt.Errorf("failed to marshal message: %w", err)
+  }
+
+  _, err = s.stdinPipe.WriteString(string(message) + "\n")
+  if err != nil {
+    return nil, err
+  }
+
+  println("writing echo: %s", string(message))
+
+  return &initpb.InitResponse {
+    Src: in.Dest,
+    Dest: in.Src,
+    Body: &initpb.InitResponseBody {
+      Type: "init_ok",
+      MsgId: 0,
+      InReplyTo: nil,
+    },  
+  }, nil
+}
+
+func (s *server) SendEcho(ctx context.Context, in *echopb.EchoRequest) (*echopb.EchoResponse, error) {
+  s.mu.Lock()
+  defer s.mu.Unlock()
+
+  message, err := json.Marshal(in)
+  if err != nil {
+    return nil, fmt.Errorf("failed to marshal message: %w", err)
+  }
+
+  _, err = s.stdinPipe.WriteString(string(message) + "\n")
+  if err != nil {
+    return nil, err
+  }
+
+  return &echopb.EchoResponse {
+    Src: in.Dest,
+    Dest: in.Src,
+    Body: &echopb.EchoResponseBody {
+      Type: "echo_ok",
+      Echo: in.Body.Echo,
+      MsgId: in.Body.MsgId,
+      InReplyTo: in.Body.MsgId,
+    },
+  }, nil
+}
+
 func main() {
-	rustCmd := exec.Command("path/to/rust_binary")
+	rustCmd := exec.Command("/home/shrestha/rust/distributed_systems/target/debug/echo")
 
 	stdinPipe, err := rustCmd.StdinPipe()
 	if err != nil {
@@ -37,7 +93,7 @@ func main() {
 		log.Fatalf("Failed to start Rust binary: %v", err)
 	}
 
-	s := &server{
+	s := &server {
 		rustProcess: rustCmd,
 		stdinPipe:   stdinPipe.(*os.File),
 	}

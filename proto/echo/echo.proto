@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package myservice.echo;
 
-option go_package = "github.com/Shresth72/go_gRPC_tester/proto/echo";
+option go_package = "proto/echo";
 
 service EchoService { rpc SendEcho(EchoRequest) returns (EchoResponse); }
 
@@ -26,7 +26,7 @@ message EchoResponse {
 
 message EchoResponseBody {
   int32 msg_id = 1;
-  string in_reply_to = 2;
+  int32 in_reply_to = 2;
   string type = 3;
   string echo = 4;
 }

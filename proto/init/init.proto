@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package myservice.init;
 
-option go_package = "github.com/Shresth72/go_gRPC_tester/proto/init";
+option go_package = "proto/init";
 
 service InitService { rpc SendInit(InitRequest) returns (InitResponse); }
 
