@@ -58,6 +58,7 @@ func (s *server) writeToStdin(in interface{}) error {
   if err != nil {
     return fmt.Errorf("failed to write to stdin: %w", err)
   }
+  // fix
   println("writing: ", in, string(message))
 
   return nil
@@ -168,7 +169,7 @@ func (s* server) SetBinaryName(ctx context.Context, in *initpb.SetBinaryNameRequ
   rustCmd.Stderr = os.Stderr
 
   if err := rustCmd.Start(); err != nil {
-      return nil, fmt.Errorf("failed to start binary: %v", err)
+      return nil, fmt.Errorf("failed to start the binary: %v", err)
   }
 
   s.rustProcess = rustCmd
