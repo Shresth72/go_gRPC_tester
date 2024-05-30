@@ -1,5 +1,6 @@
 # *.pb.go
 
+# conflict
 /bin
 
 go.sum
