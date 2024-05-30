@@ -4,54 +4,60 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"time"
-  "flag"
-  "fmt"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	broadcastpb "github.com/Shresth72/go_gRPC_tester/proto/broadcast"
 	echopb "github.com/Shresth72/go_gRPC_tester/proto/echo"
 	initpb "github.com/Shresth72/go_gRPC_tester/proto/init"
 	uniqueidpb "github.com/Shresth72/go_gRPC_tester/proto/unique_ids"
-	broadcastpb "github.com/Shresth72/go_gRPC_tester/proto/broadcast"
 )
 
-type RequestType int 
+type RequestType int
 
 const (
-  EchoRequest RequestType = iota
-  UniqueIdsRequest
-  BroadcastRequest
-  UnknownRequest
+	EchoRequest RequestType = iota
+	UniqueIdsRequest
+	BroadcastRequest
+	UnknownRequest
 )
 
 func (rt RequestType) String() string {
-  switch rt {
-  case EchoRequest:
-    return "echo"
-  case UniqueIdsRequest:
-    return "unique_ids"
-  case BroadcastRequest:
-    return "broadcast"
-  default:
-    return "unknown"
-  }
+	switch rt {
+	case EchoRequest:
+		return "echo"
+	case UniqueIdsRequest:
+		return "unique_ids"
+	case BroadcastRequest:
+		return "broadcast"
+	default:
+		return "unknown"
+	}
 }
 
 func main() {
-  var requestTypeStr string
+	var requestTypeStr string
+	var requestCount int
 
-  flag.StringVar(&requestTypeStr, "request", "", "type of request")
-  flag.Parse()
+	flag.StringVar(&requestTypeStr, "request", "", "type of request")
+	flag.IntVar(&requestCount, "count", 0, "number of requests")
+	flag.Parse()
 
-  requestType, err := parseRequestType(requestTypeStr)
-  if err != nil {
-    log.Fatalf("Invalid request type: %v", err)
-  }
+	requestType, err := parseRequestType(requestTypeStr)
+	if err != nil {
+		log.Fatalf("Invalid request type: %v", err)
+	}
 
-  binaryName := requestType.String() 
+	if requestCount <= 0 {
+		log.Fatalf("count cannot be less or equal to 0: %d", requestCount)
+	}
+
+	binaryName := requestType.String()
 
 	conn, err := grpc.NewClient("localhost:5051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -61,25 +67,25 @@ func main() {
 
 	initClient := initpb.NewInitServiceClient(conn)
 	echoClient := echopb.NewEchoServiceClient(conn)
-  uniqueIdsClient := uniqueidpb.NewUniqueIdsServiceClient(conn)
-  broadcastClient := broadcastpb.NewBroadcastServiceClient(conn)
+	uniqueIdsClient := uniqueidpb.NewUniqueIdsServiceClient(conn)
+	broadcastClient := broadcastpb.NewBroadcastServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-  setBinaryNameReq := &initpb.SetBinaryNameRequest{
-    BinaryName: binaryName,
-  }
+	setBinaryNameReq := &initpb.SetBinaryNameRequest{
+		BinaryName: binaryName,
+	}
 
-  _, err = initClient.SetBinaryName(ctx, setBinaryNameReq)
-  if err != nil {
-    log.Fatalf("failed to set binary name: %v", err)
-  }
+	_, err = initClient.SetBinaryName(ctx, setBinaryNameReq)
+	if err != nil {
+		log.Fatalf("failed to set binary name: %v", err)
+	}
 
-	initReq := &initpb.InitRequest {
+	initReq := &initpb.InitRequest{
 		Src:  "n1",
 		Dest: "n2",
-		Body: &initpb.InitRequestBody {
+		Body: &initpb.InitRequestBody{
 			Type:    "init",
 			NodeId:  "n1",
 			NodeIds: []string{"n1", "n2"},
@@ -92,32 +98,30 @@ func main() {
 	}
 	log.Printf("Response to init: %s", initRes.Body.Type)
 
-  switch requestType {
-  case EchoRequest:
-    sendEchoRequest(ctx, echoClient, "hello from grpc")
-    sendEchoRequest(ctx, echoClient, "this is not me")
-    sendEchoRequest(ctx, echoClient, "hello me it's me again")
-  case UniqueIdsRequest:
-    sendUniqueIdsRequest(ctx, uniqueIdsClient)
-    sendUniqueIdsRequest(ctx, uniqueIdsClient)
-    sendUniqueIdsRequest(ctx, uniqueIdsClient)
-    sendUniqueIdsRequest(ctx, uniqueIdsClient)
-    sendUniqueIdsRequest(ctx, uniqueIdsClient)
-  case BroadcastRequest:
-    sendBroadcastRequest(ctx, broadcastClient, 123)
-  default:
-    log.Fatalf("unknown request type: %s", requestType)
-  }
+	switch requestType {
+	case EchoRequest:
+		for i := 0; i < requestCount; i++ {
+			sendEchoRequest(ctx, echoClient, "hello from grpc")
+		}
+	case UniqueIdsRequest:
+		for i := 0; i < requestCount; i++ {
+			sendUniqueIdsRequest(ctx, uniqueIdsClient)
+		}
+	case BroadcastRequest:
+		sendBroadcastRequest(ctx, broadcastClient, 235)
+	default:
+		log.Fatalf("unknown request type: %s", requestType)
+	}
 }
 
 func sendEchoRequest(ctx context.Context, echoClient echopb.EchoServiceClient, echo string) {
-	echoReq := &echopb.EchoRequest {
+	echoReq := &echopb.EchoRequest{
 		Src:  "n1",
 		Dest: "n2",
-		Body: &echopb.EchoRequestBody {
+		Body: &echopb.EchoRequestBody{
 			Type:  "echo",
 			MsgId: 1,
-			Echo: echo,
+			Echo:  echo,
 		},
 	}
 
@@ -145,46 +149,46 @@ func sendUniqueIdsRequest(ctx context.Context, uniqueIdsClient uniqueidpb.Unique
 }
 
 func sendBroadcastRequest(ctx context.Context, broadcastClient broadcastpb.BroadcastServiceClient, message int32) {
-  broadcastReq := &broadcastpb.BroadcastRequest {
-    Src: "n1",
-    Dest: "n2",
-    Body: &broadcastpb.BroadcastRequestBody {
-      Type: "broadcast",
-      Message: message,
-    },
-  }
-  broadcastRes, err := broadcastClient.SendBroadcast(ctx, broadcastReq)
+	broadcastReq := &broadcastpb.BroadcastRequest{
+		Src:  "n1",
+		Dest: "n2",
+		Body: &broadcastpb.BroadcastRequestBody{
+			Type:    "broadcast",
+			Message: message,
+		},
+	}
+	broadcastRes, err := broadcastClient.SendBroadcast(ctx, broadcastReq)
 	if err != nil {
 		log.Fatalf("Failed to send Broadcast request: %v", err)
 	}
 	log.Printf("Response to broadcast: %s", broadcastRes.Body.Type)
 
-  readReq := &broadcastpb.ReadRequest{
-    Src: "n1",
-    Dest: "n2",
-    Body: &broadcastpb.ReadRequestBody {
-      Type: "read",
-    },
-  }
-  readRes, err := broadcastClient.SendRead(ctx, readReq)
+	readReq := &broadcastpb.ReadRequest{
+		Src:  "n1",
+		Dest: "n2",
+		Body: &broadcastpb.ReadRequestBody{
+			Type: "read",
+		},
+	}
+	readRes, err := broadcastClient.SendRead(ctx, readReq)
 	if err != nil {
 		log.Fatalf("Failed to send Read request: %v", err)
 	}
 	log.Printf("Response to read: %s", readRes.Body.Type)
 
-  topologyReq := &broadcastpb.TopologyRequest {
-    Src: "n1",
-    Dest: "n2",
-    Body: &broadcastpb.TopologyRequestBody{
-      Type: "topology",
-      Topology: map[string]*broadcastpb.Topology{
-        "n1": {Neighbors: []string{"n2", "n3"}},
-        "n2": {Neighbors: []string{"n1"}},
-        "n3": {Neighbors: []string{"n1"}},
-      },
-    },
-  }  
-  topologyRes, err := broadcastClient.SendTopology(ctx, topologyReq)
+	topologyReq := &broadcastpb.TopologyRequest{
+		Src:  "n1",
+		Dest: "n2",
+		Body: &broadcastpb.TopologyRequestBody{
+			Type: "topology",
+			Topology: map[string]*broadcastpb.Topology{
+				"n1": {Neighbors: []string{"n2", "n3"}},
+				"n2": {Neighbors: []string{"n1"}},
+				"n3": {Neighbors: []string{"n1"}},
+			},
+		},
+	}
+	topologyRes, err := broadcastClient.SendTopology(ctx, topologyReq)
 	if err != nil {
 		log.Fatalf("Failed to send topology request: %v", err)
 	}
@@ -197,8 +201,8 @@ func parseRequestType(requestTypeStr string) (RequestType, error) {
 		return EchoRequest, nil
 	case "unique_ids":
 		return UniqueIdsRequest, nil
-  case "broadcast":
-    return BroadcastRequest, nil
+	case "broadcast":
+		return BroadcastRequest, nil
 	default:
 		return UnknownRequest, fmt.Errorf("unknown request type: %s", requestTypeStr)
 	}
