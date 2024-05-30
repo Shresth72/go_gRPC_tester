@@ -1,6 +1,9 @@
 package main
 
+// go build -o bin/server cmd/server/main.go && ./bin/server
+
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,14 +18,29 @@ import (
 
 	echopb "github.com/Shresth72/go_gRPC_tester/proto/echo"
 	initpb "github.com/Shresth72/go_gRPC_tester/proto/init"
+	uniqueidpb "github.com/Shresth72/go_gRPC_tester/proto/unique_ids"
 )
 
 type server struct {
 	initpb.UnimplementedInitServiceServer
 	echopb.UnimplementedEchoServiceServer
+  uniqueidpb.UnimplementedUniqueIdsServiceServer
+
+  binaryName string
 	rustProcess *exec.Cmd
 	stdinPipe   *os.File
+  stdoutPipe  *bufio.Reader
 	mu          sync.Mutex
+}
+
+func (s *server) captureOutput() {
+  scanner := bufio.NewScanner(s.stdoutPipe)
+  for scanner.Scan() {
+      log.Printf("binary output: %s", scanner.Text())
+  }
+  if err := scanner.Err(); err != nil {
+      log.Printf("error reading from binary output: %v", err)
+  }
 }
 
 func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.InitResponse, error) {
@@ -38,8 +56,7 @@ func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.
   if err != nil {
     return nil, err
   }
-
-  println("writing echo: %s", string(message))
+  println("writing init", string(message))
 
   return &initpb.InitResponse {
     Src: in.Dest,
@@ -58,7 +75,7 @@ func (s *server) SendEcho(ctx context.Context, in *echopb.EchoRequest) (*echopb.
 
   message, err := json.Marshal(in)
   if err != nil {
-    return nil, fmt.Errorf("failed to marshal message: %w", err)
+    return nil, fmt.Errorf("failed to marshal echo message: %w", err)
   }
 
   _, err = s.stdinPipe.WriteString(string(message) + "\n")
@@ -78,29 +95,71 @@ func (s *server) SendEcho(ctx context.Context, in *echopb.EchoRequest) (*echopb.
   }, nil
 }
 
+func (s* server) SendUniqueIds(ctx context.Context, in *uniqueidpb.UniqueIdsRequest) (*uniqueidpb.UniqueIdsResponse, error) {
+  s.mu.Lock()
+  defer s.mu.Unlock()
+
+  message, err := json.Marshal(in)
+  if err != nil {
+    return nil, fmt.Errorf("failed to marshal unique_ids message: %w", err)
+  }
+
+  _, err = s.stdinPipe.WriteString(string(message) + "\n")
+  if err != nil {
+    return nil, err
+  }
+
+  return &uniqueidpb.UniqueIdsResponse{
+    Src: in.Dest,
+    Dest: in.Src,
+    Body: &uniqueidpb.UniqueIdsResponseBody{
+      Type: "generate_ok",
+      Id: 1,
+    },
+  }, nil
+}
+
+func (s* server) SetBinaryName(ctx context.Context, in *initpb.SetBinaryNameRequest) (*initpb.SetBinaryNameResponse, error) {
+  s.mu.Lock()
+  defer s.mu.Unlock()
+
+  s.binaryName = in.BinaryName
+  binaryPath := fmt.Sprintf("/home/shrestha/rust/distributed_systems/target/debug/%s", s.binaryName)
+  rustCmd := exec.Command(binaryPath)
+
+  stdinPipe, err := rustCmd.StdinPipe()
+  if err != nil {
+      return nil, fmt.Errorf("failed to get stdin pipe: %v", err)
+  }
+
+  stdoutPipe, err := rustCmd.StdoutPipe()
+  if err != nil {
+      return nil, fmt.Errorf("failed to get stdout pipe: %v", err)
+  }
+
+  rustCmd.Stderr = os.Stderr
+
+  if err := rustCmd.Start(); err != nil {
+      return nil, fmt.Errorf("failed to start binary: %v", err)
+  }
+
+  s.rustProcess = rustCmd
+  s.stdinPipe = stdinPipe.(*os.File)
+  s.stdoutPipe = bufio.NewReader(stdoutPipe)
+
+  go s.captureOutput() // Ensure output is captured
+
+  return &initpb.SetBinaryNameResponse{}, nil
+}
+
 func main() {
-	rustCmd := exec.Command("/home/shrestha/rust/distributed_systems/target/debug/echo")
-
-	stdinPipe, err := rustCmd.StdinPipe()
-	if err != nil {
-		log.Fatalf("Failed to get stdin pipe: %v", err)
-	}
-
-	rustCmd.Stdout = os.Stdout
-	rustCmd.Stderr = os.Stderr
-
-	if err := rustCmd.Start(); err != nil {
-		log.Fatalf("Failed to start Rust binary: %v", err)
-	}
-
-	s := &server {
-		rustProcess: rustCmd,
-		stdinPipe:   stdinPipe.(*os.File),
-	}
+  s := &server{}
 
 	grpcServer := grpc.NewServer()
 	initpb.RegisterInitServiceServer(grpcServer, s)
 	echopb.RegisterEchoServiceServer(grpcServer, s)
+  uniqueidpb.RegisterUniqueIdsServiceServer(grpcServer, s)
+
 	reflection.Register(grpcServer)
 
 	lis, err := net.Listen("tcp", ":5051")
@@ -111,9 +170,5 @@ func main() {
 	log.Printf("Server is listening on :5051")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
-	}
-
-	if err := rustCmd.Wait(); err != nil {
-		log.Fatalf("Rust process exited with error: %v", err)
 	}
 }

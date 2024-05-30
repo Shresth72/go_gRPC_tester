@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	InitService_SendInit_FullMethodName = "/myservice.init.InitService/SendInit"
+	InitService_SendInit_FullMethodName      = "/myservice.init.InitService/SendInit"
+	InitService_SetBinaryName_FullMethodName = "/myservice.init.InitService/SetBinaryName"
 )
 
 // InitServiceClient is the client API for InitService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type InitServiceClient interface {
 	SendInit(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
+	SetBinaryName(ctx context.Context, in *SetBinaryNameRequest, opts ...grpc.CallOption) (*SetBinaryNameResponse, error)
 }
 
 type initServiceClient struct {
@@ -46,11 +48,21 @@ func (c *initServiceClient) SendInit(ctx context.Context, in *InitRequest, opts 
 	return out, nil
 }
 
+func (c *initServiceClient) SetBinaryName(ctx context.Context, in *SetBinaryNameRequest, opts ...grpc.CallOption) (*SetBinaryNameResponse, error) {
+	out := new(SetBinaryNameResponse)
+	err := c.cc.Invoke(ctx, InitService_SetBinaryName_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InitServiceServer is the server API for InitService service.
 // All implementations must embed UnimplementedInitServiceServer
 // for forward compatibility
 type InitServiceServer interface {
 	SendInit(context.Context, *InitRequest) (*InitResponse, error)
+	SetBinaryName(context.Context, *SetBinaryNameRequest) (*SetBinaryNameResponse, error)
 	mustEmbedUnimplementedInitServiceServer()
 }
 
@@ -60,6 +72,9 @@ type UnimplementedInitServiceServer struct {
 
 func (UnimplementedInitServiceServer) SendInit(context.Context, *InitRequest) (*InitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendInit not implemented")
+}
+func (UnimplementedInitServiceServer) SetBinaryName(context.Context, *SetBinaryNameRequest) (*SetBinaryNameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetBinaryName not implemented")
 }
 func (UnimplementedInitServiceServer) mustEmbedUnimplementedInitServiceServer() {}
 
@@ -92,6 +107,24 @@ func _InitService_SendInit_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InitService_SetBinaryName_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBinaryNameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InitServiceServer).SetBinaryName(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InitService_SetBinaryName_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InitServiceServer).SetBinaryName(ctx, req.(*SetBinaryNameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // InitService_ServiceDesc is the grpc.ServiceDesc for InitService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -102,6 +135,10 @@ var InitService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendInit",
 			Handler:    _InitService_SendInit_Handler,
+		},
+		{
+			MethodName: "SetBinaryName",
+			Handler:    _InitService_SetBinaryName_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

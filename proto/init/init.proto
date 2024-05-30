@@ -4,7 +4,10 @@ package myservice.init;
 
 option go_package = "proto/init";
 
-service InitService { rpc SendInit(InitRequest) returns (InitResponse); }
+service InitService {
+  rpc SendInit(InitRequest) returns (InitResponse);
+  rpc SetBinaryName(SetBinaryNameRequest) returns (SetBinaryNameResponse);
+}
 
 message InitRequest {
   string src = 1;
@@ -29,3 +32,7 @@ message InitResponseBody {
   optional string in_reply_to = 2;
   string type = 3;
 }
+
+message SetBinaryNameRequest { string binary_name = 1; }
+
+message SetBinaryNameResponse {}
