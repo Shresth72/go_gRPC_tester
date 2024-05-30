@@ -19,14 +19,16 @@ import (
 	echopb "github.com/Shresth72/go_gRPC_tester/proto/echo"
 	initpb "github.com/Shresth72/go_gRPC_tester/proto/init"
 	uniqueidpb "github.com/Shresth72/go_gRPC_tester/proto/unique_ids"
+	broadcastpb "github.com/Shresth72/go_gRPC_tester/proto/broadcast"
 )
 
 type server struct {
 	initpb.UnimplementedInitServiceServer
 	echopb.UnimplementedEchoServiceServer
   uniqueidpb.UnimplementedUniqueIdsServiceServer
+  broadcastpb.UnimplementedBroadcastServiceServer
 
-  binaryName string
+  binaryName  string
 	rustProcess *exec.Cmd
 	stdinPipe   *os.File
   stdoutPipe  *bufio.Reader
@@ -43,20 +45,64 @@ func (s *server) captureOutput() {
   }
 }
 
-func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.InitResponse, error) {
+func (s *server) writeToStdin(in interface{}) error {
   s.mu.Lock()
   defer s.mu.Unlock()
 
   message, err := json.Marshal(in)
   if err != nil {
-    return nil, fmt.Errorf("failed to marshal message: %w", err)
+    return fmt.Errorf("failed to marshal message: %w", err)
   }
 
   _, err = s.stdinPipe.WriteString(string(message) + "\n")
   if err != nil {
+    return fmt.Errorf("failed to write to stdin: %w", err)
+  }
+  println("writing: ", in, string(message))
+
+  return nil
+}
+
+func (s *server) handleBroadcast(request interface{}) (interface{}, error) {
+  if err := s.writeToStdin(request); err != nil {
     return nil, err
   }
-  println("writing init", string(message))
+
+  switch req := request.(type) {
+  case *broadcastpb.BroadcastRequest:
+    return &broadcastpb.BroadcastResponse {
+      Src: req.Dest,
+      Dest: req.Src,
+      Body: &broadcastpb.BroadcastResponseBody{
+        Type: "broadcast_ok",
+      },
+    }, nil
+  case *broadcastpb.ReadRequest:
+    return &broadcastpb.ReadResponse {
+      Src: req.Dest,
+      Dest: req.Src,
+      Body: &broadcastpb.ReadResponseBody {
+        Type: "read_ok",
+        Messages: []int32{1,2,3},
+      },
+    }, nil 
+  case *broadcastpb.TopologyRequest:
+    return &broadcastpb.TopologyResponse {
+      Src: req.Dest,
+      Dest: req.Src,
+      Body: &broadcastpb.TopologyResponseBody {
+        Type: "topology_ok",
+      },
+    }, nil
+  default:
+    return nil, fmt.Errorf("unsupported request type")
+  }
+}
+
+func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.InitResponse, error) {
+  if err := s.writeToStdin(in); err != nil {
+    return nil, err
+  }
 
   return &initpb.InitResponse {
     Src: in.Dest,
@@ -70,16 +116,7 @@ func (s *server) SendInit(ctx context.Context, in *initpb.InitRequest) (*initpb.
 }
 
 func (s *server) SendEcho(ctx context.Context, in *echopb.EchoRequest) (*echopb.EchoResponse, error) {
-  s.mu.Lock()
-  defer s.mu.Unlock()
-
-  message, err := json.Marshal(in)
-  if err != nil {
-    return nil, fmt.Errorf("failed to marshal echo message: %w", err)
-  }
-
-  _, err = s.stdinPipe.WriteString(string(message) + "\n")
-  if err != nil {
+  if err := s.writeToStdin(in); err != nil {
     return nil, err
   }
 
@@ -96,16 +133,7 @@ func (s *server) SendEcho(ctx context.Context, in *echopb.EchoRequest) (*echopb.
 }
 
 func (s* server) SendUniqueIds(ctx context.Context, in *uniqueidpb.UniqueIdsRequest) (*uniqueidpb.UniqueIdsResponse, error) {
-  s.mu.Lock()
-  defer s.mu.Unlock()
-
-  message, err := json.Marshal(in)
-  if err != nil {
-    return nil, fmt.Errorf("failed to marshal unique_ids message: %w", err)
-  }
-
-  _, err = s.stdinPipe.WriteString(string(message) + "\n")
-  if err != nil {
+  if err := s.writeToStdin(in); err != nil {
     return nil, err
   }
 
@@ -152,6 +180,30 @@ func (s* server) SetBinaryName(ctx context.Context, in *initpb.SetBinaryNameRequ
   return &initpb.SetBinaryNameResponse{}, nil
 }
 
+func (s *server) SendBroadcast(ctx context.Context, in *broadcastpb.BroadcastRequest) (*broadcastpb.BroadcastResponse, error) {
+  resp, err := s.handleBroadcast(in)
+  if err != nil {
+    return nil, err
+  }
+  return resp.(*broadcastpb.BroadcastResponse), nil
+}
+
+func (s *server) SendRead(ctx context.Context, in *broadcastpb.ReadRequest) (*broadcastpb.ReadResponse, error) {
+  resp, err := s.handleBroadcast(in)
+  if err != nil {
+    return nil, err
+  }
+  return resp.(*broadcastpb.ReadResponse), nil
+}
+
+func (s *server) SendTopology(ctx context.Context, in *broadcastpb.TopologyRequest) (*broadcastpb.TopologyResponse, error) {
+  resp, err := s.handleBroadcast(in)
+  if err != nil {
+    return nil, err
+  }
+  return resp.(*broadcastpb.TopologyResponse), nil
+}
+
 func main() {
   s := &server{}
 
@@ -159,6 +211,7 @@ func main() {
 	initpb.RegisterInitServiceServer(grpcServer, s)
 	echopb.RegisterEchoServiceServer(grpcServer, s)
   uniqueidpb.RegisterUniqueIdsServiceServer(grpcServer, s)
+  broadcastpb.RegisterBroadcastServiceServer(grpcServer, s)
 
 	reflection.Register(grpcServer)
 
